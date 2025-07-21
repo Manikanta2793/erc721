@@ -1,73 +1,106 @@
-
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.26;
+pragma solidity ^0.8.9;
 
-
-contract ERC20Token{
-    string public name;
-    string public symbol;
+contract MyToken {
     address public owner;
-    uint public totalSupply;
+    uint private tokenId;
+    string public name = "MyToken";
+    string public symbol = "MTK";
 
+    mapping(uint => address) public ownerOf;
+    mapping(uint => string) public tokenURI;
+    mapping(uint => address) public tokenApprovals;
+    mapping(address => mapping(address => bool)) public operatorApprovals;
+    mapping(address => uint) public balances;
 
-    mapping(address => uint) public address_balance;
-    //mapping(address=>uint)allowance;
-    mapping(address => mapping(address => uint value)) Allowance;
-constructor(string memory _name,string memory _symbol){ 
-    
-    name = _name;
-    symbol = _symbol; 
-    owner = msg.sender;  
-}
-modifier onlyOwner() {
-    require(owner == msg.sender, "only owner can Access");
-    
-    _;
-}
+    enum Status { PAUSE, UNPAUSE }
+    Status public currentStatus;
 
-function mint(address to, uint amount) public onlyOwner(){
-    require(amount > 0,"amount should be greater than 0");
-    require(to != address(0) ,"address should not be empty");
-    
-    address_balance[to] += amount;
-    totalSupply += amount;
-}
-event transferDetails(address to,address indexed recepient,uint amount);
+    constructor() {
+        owner = msg.sender;
+        currentStatus = Status.UNPAUSE;
+    }
 
-function transfer(address recepient  , uint amount ) public {
-    
-    require(recepient != address(0),"Invalid address");
-    require(amount > 0,"transfer amount should be greater than 0");
-    require(address_balance[msg.sender]>=amount, "Insufficient funds to transfer" );
-    address_balance[recepient] += amount;
-    address_balance[msg.sender] -= amount;
-    emit transferDetails(msg.sender, recepient, amount);
+    function pause() public {
+        require(msg.sender == owner, "Only owner can pause");
+        currentStatus = Status.PAUSE;
+    }
 
+    function unPause() public {
+        require(msg.sender == owner, "Only owner can unpause");
+        currentStatus = Status.UNPAUSE;
+    }
 
-}
-function approve( address whom, uint amount) public  returns(bool status){
-    require(address_balance[msg.sender]>= amount,"Insufficient funds to approve");
-    Allowance[msg.sender][whom] +=amount;
-    return true;
-    
-}
-function transferFrom(address sender, address recipient,  uint amount) public {
+    function transferOwnership(address newOwner) public {
+        require(msg.sender == owner, "Only owner can transfer ownership");
+        require(newOwner != address(0), "Invalid new owner");
+        owner = newOwner;
+    }
 
-    require(Allowance[sender][msg.sender]>= amount,"Insufficient funds");
-    address_balance[recipient] += amount;
-    Allowance[sender][msg.sender] -= amount;
-    address_balance[sender] -= amount;
-}
+    function safeMint(address to, string memory uri) public {
+        require(msg.sender == owner, "Only owner can mint");
+        require(to != address(0), "Invalid address");
+        require(currentStatus == Status.UNPAUSE, "Minting is paused");
 
-function burn(address account , uint value)public{
+        tokenId++;
+        ownerOf[tokenId] = to;
+        tokenURI[tokenId] = uri;
+        balances[to]++;
+    }
 
+    function balanceOf(address user) public view returns (uint) {
+        require(user != address(0), "Invalid address");
+        return balances[user];
+    }
 
-    require(account != address(0),"Invalid address");
-    require(address_balance[account] >= value,"Insufficient funds to transfer");
+    function approve(address to, uint _tokenId) public {
+        address tokenOwner = ownerOf[_tokenId];
+        require(tokenOwner != address(0), "Token doesn't exist");
+        require(to != tokenOwner, "Cannot approve current owner");
+        require(msg.sender == tokenOwner , "Not authorized");
 
-    address_balance[account] -= value;
-    address_balance[address(0)] += value;
+        tokenApprovals[_tokenId] = to;
+    }
 
-}
+    function getApproved(uint _tokenId) public view returns (address) {
+        require(ownerOf[_tokenId] != address(0), "Token doesn't exist");
+        return tokenApprovals[_tokenId];
+    }
 
+    function setApprovalForAll(address operator, bool approved) public {
+        require(operator != msg.sender, "Cannot approve yourself");
+        operatorApprovals[msg.sender][operator] = approved;
+    }
+
+    function isApprovedForAll(address _owner, address operator) public view returns (bool) {
+        return operatorApprovals[_owner][operator];
+    }
+
+    function transferFrom(address from, address to, uint _tokenId) public {
+        address tokenOwner = ownerOf[_tokenId];
+        require(tokenOwner != address(0), "Token doesn't exist");
+        require(to != address(0), "Invalid recipient");
+        require(
+            msg.sender == tokenOwner ||
+            tokenApprovals[_tokenId] == msg.sender ||
+            operatorApprovals[tokenOwner][msg.sender],
+            "Not authorized"
+        );
+        require(tokenOwner == from, "From is not the owner");
+
+        
+        ownerOf[_tokenId] = to;
+        balances[from]--;
+        balances[to]++;
+        
+    }
+
+    function safeTransferFrom(address from, address to, uint _tokenId) public {
+        transferFrom(from, to, _tokenId);
+    }
+
+    function tokenURIof(uint _tokenId) public view returns (string memory) {
+        require(ownerOf[_tokenId] != address(0), "Token doesn't exist");
+        return tokenURI[_tokenId];
+    }
 }
